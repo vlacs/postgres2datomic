@@ -45,9 +45,11 @@
 (defn main
   "Main - used for testing for now..."
   [table]
-  (let [config (edn/read-string (slurp "config.edn"))]
-    (reset-datomic (get-in config [:datomic :uri]))
-    (pprint (take 2 (map datumize (postgres-table-schema (:postgres config) table)))))
-  )
+  (let [config          (edn/read-string (slurp "config.edn")) 
+        postgres-spec   (:postgres config)
+        datomic-uri     (get-in config [:datomic :uri])
+        datomic-conn    (reset-datomic datomic-uri)
+        schema-tx       (map datumize (postgres-table-schema postgres-spec table))]
+    @(d/transact datomic-conn schema-tx)))
   
 
