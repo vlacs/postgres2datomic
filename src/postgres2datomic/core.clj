@@ -1,6 +1,6 @@
 (ns postgres2datomic.core
   (:require [clojure.java.jdbc :as jdbc]
-            [datomic.api :as d :refer [db q]]
+            [datomic.api :as d]
             [clojure.string :as str]
             [clojure.edn :as edn]
             [clojure.pprint :refer [pprint]])
@@ -21,7 +21,7 @@
       (str/replace "." "-")
       (keyword)))
 
-(defn typer [pg-type]
+(defn pg-to-datomic-data-type [pg-type]
   "Convert a postgres column type to a datomic datum type"
   (cond
    (= pg-type "character varying") "string"
@@ -29,27 +29,49 @@
    (= pg-type "bigint") "long"
    (= pg-type "text") "string"))
    
-(defn postgres-table-schema [db table]
-  "Query a postgres database for a table schema"
+(defn get-pg-table-cols [db table]
+  "Query a postgres database for table columns and data types"
   (jdbc/query db
     ["select table_name, column_name, data_type from INFORMATION_SCHEMA.COLUMNS where table_name = ?" table]))
 
-(defn datumize [{:keys[table_name column_name data_type]}]
-  "Convert a postgres table column type to a datum schema"
+(defn get-pg-table-rows [db table]
+  "Query a postgres database table for 10 rows...for now"
+  (jdbc/query db
+    ["select * from ? limit 10"]))
+
+(defn datomize-pg-col [{:keys[table_name column_name data_type]}]
+  "Convert a postgres table column to a datom"
    {:db/id (d/tempid :db.part/db)
     :db/ident (keyword (str table_name "/" column_name))
-    :db/valueType (keyword (str "db.type/" (typer data_type)))
+    :db/valueType (keyword (str "db.type/" (pg-to-datomic-data-type data_type)))
     :db/cardinality :db.cardinality/one
     :db.install/_attribute :db.part/db})
 
+(defn datomize-pg-row [row]
+  "Convert a postgres table row to a datom"
+  row)
+
 (defn main
-  "Main - used for testing for now..."
+  "Main - Return db with schema loaded"
   [table]
-  (let [config          (edn/read-string (slurp "config.edn")) 
-        postgres-spec   (:postgres config)
-        datomic-uri     (get-in config [:datomic :uri])
-        datomic-conn    (reset-datomic datomic-uri)
-        schema-tx       (map datumize (postgres-table-schema postgres-spec table))]
-    @(d/transact datomic-conn schema-tx)))
-  
+  (let [config            (edn/read-string (slurp "config.edn")) 
+        pg-spec           (:postgres config)
+        datomic-uri       (get-in config [:datomic :uri])
+        datomic-conn      (reset-datomic datomic-uri)
+        schema-tx-data    (map datomize-pg-col (get-pg-table-cols pg-spec table))
+        ;data-tx-data      (map datomize-pg-row (get-pg-table-rows pg-spec table))
+        schema-tx-future  @(d/transact datomic-conn schema-tx-data)
+        ;data-tx-future    @(d/transact datomic-conn data-tx-data)
+        ]
+        (def db (d/db datomic-conn))
+        ;; find attributes in the table namespace
+        (d/q '[:find ?ident
+              :in $ ?ns
+               :where
+               [?e :db/ident ?ident]
+               [_ :db.install/attribute ?e]
+               [(namespace ?ident) ?ns]]
+             db
+             table)))
+
 
