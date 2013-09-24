@@ -23,6 +23,7 @@
 
 (defn pg-to-datomic-data-type [pg-type]
   "Convert a postgres column type to a datomic datum type"
+  ;; TODO convert to map
   (cond
    (= pg-type "character varying") "string"
    (= pg-type "smallint") "long"
