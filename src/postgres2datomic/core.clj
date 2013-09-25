@@ -23,13 +23,13 @@
 
 (defn pg-to-datomic-data-type [pg-type]
   "Convert a postgres column type to a datomic datum type"
-  ;; TODO convert to map
-  (cond
-   (= pg-type "character varying") "string"
-   (= pg-type "smallint") "long"
-   (= pg-type "bigint") "long"
-   (= pg-type "text") "string"))
-   
+  (let [type-map (clojure.walk/keywordize-keys 
+                  {"character varying" "string"
+                   "smallint" "long"
+                   "bigint" "long"
+                   "text" "string"})]
+  (type-map (keyword pg-type))))
+
 (defn get-pg-table-cols [db table]
   "Query a postgres database for table columns and data types"
   (jdbc/query db
