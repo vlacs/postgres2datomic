@@ -28,24 +28,26 @@
 (defn get-pg-table-cols [db table]
   "Query a postgres database for table columns and data types"
   (jdbc/query db
-    ["select table_name, column_name, data_type from INFORMATION_SCHEMA.COLUMNS where table_name = ?" table]))
+    ["select column_name, data_type from INFORMATION_SCHEMA.COLUMNS where table_name = ?" table]))
 
 (defn get-pg-table-rows [db table]
   "Query a postgres database table for 100 rows...for now"
   (jdbc/query db
     [(str "select * from " table " limit 100")]))
 
-(defn datomize-pg-col [{:keys[table_name column_name data_type]}]
+(defn datomize-pg-table-col [table {:keys[column_name data_type]}]
   "Convert a postgres table column to a datom"
    {:db/id (d/tempid :db.part/db)
-    :db/ident (keyword (str table_name "/" column_name))
+    :db/ident (keyword (str table "/" column_name))
     :db/valueType (keyword (str "db.type/" (type-map data_type)))
     :db/cardinality :db.cardinality/one
     :db.install/_attribute :db.part/db})
 
-(defn datomize-pg-row [row]
+(defn datomize-pg-table-row [table row]
   "Convert a postgres table row to a datom"
-  row)
+  (conj
+    {:db/id (d/tempid (keyword (str "db.part/" table)))}
+    (into {} (for [[k v] row] [(keyword (str table "/" (name k))) v]))))
 
 (defn main
   "Main - Return db with schema loaded"
@@ -54,21 +56,24 @@
         pg-spec           (:postgres config)
         datomic-uri       (get-in config [:datomic :uri])
         datomic-conn      (reset-datomic datomic-uri)
+        datomize-pg-col   (partial datomize-pg-table-col table)
+        datomize-pg-row   (partial datomize-pg-table-row table)
         schema-tx-data    (map datomize-pg-col (get-pg-table-cols pg-spec table))
         data-tx-data      (map datomize-pg-row (get-pg-table-rows pg-spec table))
         schema-tx-future  @(d/transact datomic-conn schema-tx-data)
         ;data-tx-future    @(d/transact datomic-conn data-tx-data)
         ]
         (def db (d/db datomic-conn))
+        (pprint (take 1 data-tx-data))
         ;; find attributes in the table namespace
-        (pprint data-tx-data)
-        (d/q '[:find ?ident
-              :in $ ?ns
-               :where
-               [?e :db/ident ?ident]
-               [_ :db.install/attribute ?e]
-               [(namespace ?ident) ?ns]]
-             db
-             table)))
+        ; (d/q '[:find ?ident
+        ;       :in $ ?ns
+        ;        :where
+        ;        [?e :db/ident ?ident]
+        ;        [_ :db.install/attribute ?e]
+        ;        [(namespace ?ident) ?ns]]
+        ;      db
+        ;      table)
+        ))
 
 
