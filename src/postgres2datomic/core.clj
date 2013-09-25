@@ -36,9 +36,9 @@
     ["select table_name, column_name, data_type from INFORMATION_SCHEMA.COLUMNS where table_name = ?" table]))
 
 (defn get-pg-table-rows [db table]
-  "Query a postgres database table for 10 rows...for now"
+  "Query a postgres database table for 100 rows...for now"
   (jdbc/query db
-    ["select * from ? limit 10"]))
+    [(str "select * from " table " limit 100")]))
 
 (defn datomize-pg-col [{:keys[table_name column_name data_type]}]
   "Convert a postgres table column to a datom"
@@ -60,12 +60,13 @@
         datomic-uri       (get-in config [:datomic :uri])
         datomic-conn      (reset-datomic datomic-uri)
         schema-tx-data    (map datomize-pg-col (get-pg-table-cols pg-spec table))
-        ;data-tx-data      (map datomize-pg-row (get-pg-table-rows pg-spec table))
+        data-tx-data      (map datomize-pg-row (get-pg-table-rows pg-spec table))
         schema-tx-future  @(d/transact datomic-conn schema-tx-data)
         ;data-tx-future    @(d/transact datomic-conn data-tx-data)
         ]
         (def db (d/db datomic-conn))
         ;; find attributes in the table namespace
+        (pprint data-tx-data)
         (d/q '[:find ?ident
               :in $ ?ns
                :where
