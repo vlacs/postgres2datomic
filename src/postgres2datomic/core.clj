@@ -6,6 +6,10 @@
             [clojure.pprint :refer [pprint]])
   (:gen-class))
   
+(def type-map {"character varying" "string"
+               "smallint"          "long"
+               "bigint"            "long"
+               "text"              "string"})
 (defn reset-datomic [uri]
   "Return a connection to a new database."
   ;; This will fail if the DB doesn't exist. But who cares?
@@ -21,15 +25,6 @@
       (str/replace "." "-")
       (keyword)))
 
-(defn pg-to-datomic-data-type [pg-type]
-  "Convert a postgres column type to a datomic datum type"
-  (let [type-map (clojure.walk/keywordize-keys 
-                  {"character varying" "string"
-                   "smallint" "long"
-                   "bigint" "long"
-                   "text" "string"})]
-  (type-map (keyword pg-type))))
-
 (defn get-pg-table-cols [db table]
   "Query a postgres database for table columns and data types"
   (jdbc/query db
@@ -44,7 +39,7 @@
   "Convert a postgres table column to a datom"
    {:db/id (d/tempid :db.part/db)
     :db/ident (keyword (str table_name "/" column_name))
-    :db/valueType (keyword (str "db.type/" (pg-to-datomic-data-type data_type)))
+    :db/valueType (keyword (str "db.type/" (type-map data_type)))
     :db/cardinality :db.cardinality/one
     :db.install/_attribute :db.part/db})
 
