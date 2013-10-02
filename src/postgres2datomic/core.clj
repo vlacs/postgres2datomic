@@ -70,15 +70,22 @@
         data-tx-future    @(d/transact datomic-conn data-tx-data)
         ]
         (def db (d/db datomic-conn))
-        ;; find attributes in the table namespace
-        ; (d/q '[:find ?ident
-        ;       :in $ ?ns
-        ;        :where
-        ;        [?e :db/ident ?ident]
-        ;        [_ :db.install/attribute ?e]
-        ;        [(namespace ?ident) ?ns]]
-        ;      db
-        ;      table)
-        ))
+        (dorun 
+          (map pprint [
+            "all records with firstname"
+            (d/q '[:find ?e
+                   :where [?e :mdl_user/firstname]]
+                 db)
+            "count all records with firstname"
+            (d/q '[:find (count ?e)
+                   :where [?e :mdl_user/firstname]]
+                 db)
+            "get all records with first name jared"     
+            (d/q '[:find ?e
+                   :in $ ?firstname
+                   :where [?e :mdl_user/firstname ?firstname]]
+                 db
+                 "jared")
+                 ]))))
 
 
