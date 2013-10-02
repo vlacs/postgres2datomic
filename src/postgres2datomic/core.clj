@@ -5,6 +5,8 @@
             [clojure.edn :as edn]
             [clojure.pprint :refer [pprint]])
   (:gen-class))
+
+(def not-nil? (complement nil?))
   
 (def type-map {"character varying" "string"
                "smallint"          "long"
@@ -47,7 +49,8 @@
   "Convert a postgres table row to a datom"
   (conj
     {:db/id #db/id[:db.part/user]}
-    (into {} (for [[k v] row] [(keyword (str "mdl_user" "/" (name k))) v]))))
+    (into {} (for [[k v] row  :when (not-nil? v)] 
+                  [(keyword (str "mdl_user" "/" (name k))) v]))))
 
 (defn main
   "Main - Return db with schema loaded"
@@ -61,6 +64,8 @@
         schema-tx-data    (map datomize-pg-col (get-pg-table-cols pg-spec table))
         _                 (pprint (take 1 schema-tx-data))
         data-tx-data      (map datomize-pg-row (get-pg-table-rows pg-spec table))
+        ;;data-tx-data      [{:mdl_user/idnumber nil,:db/id #db/id[:db.part/user]}]
+
         schema-tx-future  @(d/transact datomic-conn schema-tx-data)
         _                 (pprint (take 1 data-tx-data))
         data-tx-future    @(d/transact datomic-conn data-tx-data)
