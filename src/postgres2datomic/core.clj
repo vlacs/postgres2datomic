@@ -46,8 +46,8 @@
 (defn datomize-pg-table-row [table row]
   "Convert a postgres table row to a datom"
   (conj
-    {:db/id (d/tempid (keyword (str "db.part/" table)))}
-    (into {} (for [[k v] row] [(keyword (str table "/" (name k))) v]))))
+    {:db/id #db/id[:db.part/user]}
+    (into {} (for [[k v] row] [(keyword (str "mdl_user" "/" (name k))) v]))))
 
 (defn main
   "Main - Return db with schema loaded"
@@ -59,9 +59,11 @@
         datomize-pg-col   (partial datomize-pg-table-col table)
         datomize-pg-row   (partial datomize-pg-table-row table)
         schema-tx-data    (map datomize-pg-col (get-pg-table-cols pg-spec table))
+        _                 (pprint (take 1 schema-tx-data))
         data-tx-data      (map datomize-pg-row (get-pg-table-rows pg-spec table))
         schema-tx-future  @(d/transact datomic-conn schema-tx-data)
-        ;data-tx-future    @(d/transact datomic-conn data-tx-data)
+        _                 (pprint (take 1 data-tx-data))
+        data-tx-future    @(d/transact datomic-conn data-tx-data)
         ]
         (def db (d/db datomic-conn))
         (pprint (take 1 data-tx-data))
