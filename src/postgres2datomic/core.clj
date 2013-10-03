@@ -35,7 +35,7 @@
 (defn get-pg-table-rows [db table]
   "Query a postgres database table for 100 rows...for now"
   (jdbc/query db
-    [(str "select * from " table " limit 100")]))
+    [(str "select * from " table " limit 100000")]))
 
 (defn datomize-pg-table-col [table {:keys[column_name data_type]}]
   "Convert a postgres table column to a datom"
@@ -72,10 +72,6 @@
         (def db (d/db datomic-conn))
         (dorun 
           (map pprint [
-            "all records with firstname"
-            (d/q '[:find ?e
-                   :where [?e :mdl_user/firstname]]
-                 db)
             "count all records with firstname"
             (d/q '[:find (count ?e)
                    :where [?e :mdl_user/firstname]]
