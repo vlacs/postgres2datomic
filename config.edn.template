@@ -1,8 +1,6 @@
-{
-  :postgres    {:classname "org.postgresql.Driver" 
-                :subprotocol "postgresql"
-                :subname "//HOSTNAME:PORT/DATABASE-NAME"
-                :user "USER"
-                :password "PASSWORD"}
-  :datomic     {:uri "datomic:mem://name"}
-}
+{:postgres {:classname "org.postgresql.Driver"
+            :subprotocol "postgresql"
+            :subname "//HOSTNAME:PORT/DATABASE-NAME"
+            :user "USER"
+            :password "PASSWORD"}
+ :datomic {:uri "datomic:mem://name"}}
