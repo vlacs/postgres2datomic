@@ -32,10 +32,12 @@
   (jdbc/query db
     ["select column_name, data_type from INFORMATION_SCHEMA.COLUMNS where table_name = ?" table]))
 
-(defn get-pg-table-rows [db table]
+(defn get-pg-table-rows [db table & limit]
   "Query a postgres database table for 100 rows...for now"
-  (jdbc/query db
-    [(str "select * from " table " limit 100000")]))
+  (let [limit (first limit)
+        limit-clause (if limit (str " LIMIT " limit) "")]
+    (jdbc/query db
+                [(str "select * from " table limit-clause)])))
 
 (defn datomize-pg-table-col [table {:keys[column_name data_type]}]
   "Convert a postgres table column to a datom"
