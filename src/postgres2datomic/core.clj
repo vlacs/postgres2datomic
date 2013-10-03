@@ -49,7 +49,7 @@
   "Convert a postgres table row to a datom"
   (conj
     {:db/id (d/tempid :db.part/db)}
-    (into {} (for [[k v] row  :when (and (not-nil? v) (= k :firstname))] 
+    (into {} (for [[k v] row  :when (not-nil? v)] 
                   [(keyword (str "mdl_user" "/" (name k))) v]))))
 
 (defn main
@@ -64,19 +64,18 @@
         schema-tx-data    (map datomize-pg-col (get-pg-table-cols pg-spec table))
         ;_                 (pprint (take 1 schema-tx-data))
         data-tx-data      (map datomize-pg-row (get-pg-table-rows pg-spec table))
-        chunked-data-tx-data (map vector data-tx-data)
-        _                 (pprint (nth chunked-data-tx-data 0))
+
         schema-tx-future  @(d/transact datomic-conn schema-tx-data)
         ;_                 (pprint (take 2 data-tx-data))
-        transact           (partial d/transact datomic-conn)
-        data-tx-futures    (doall (map transact (vec chunked-data-tx-data)))
+        data-tx-future    @(d/transact datomic-conn data-tx-data)
         ]
-        (def futures data-tx-futures)
         (def db (d/db datomic-conn))
         (dorun 
           (map pprint [
-            "1st future"
-            (take 1 futures)
+            "all records with firstname"
+            (d/q '[:find ?e
+                   :where [?e :mdl_user/firstname]]
+                 db)
             "count all records with firstname"
             (d/q '[:find (count ?e)
                    :where [?e :mdl_user/firstname]]
@@ -88,7 +87,5 @@
                  db
                  "jared")
                  ]))))
-       
-        
 
 
