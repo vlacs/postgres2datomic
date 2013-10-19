@@ -35,7 +35,7 @@
 (defn get-pg-table-rows [db table]
   "Query a postgres database table for 100 rows...for now"
   (jdbc/query db
-    [(str "select * from " table " limit 100")]))
+    [(str "select * from " table)]))
     
 (defn get-mock-pg-rows [limit]
   "Mock data only works for mdl_user now"
@@ -124,9 +124,9 @@
         pg-table-cols     (get-pg-table-cols pg-spec table)
         schema-tx-data    (map datomize-pg-col pg-table-cols)
         ;_                 (pprint (take 1 schema-tx-data))
-        ; pg-table-rows     (get-pg-table-rows pg-spec table)
-        mock-rows         (get-mock-pg-rows 60000)
-        rows              mock-rows
+        pg-table-rows     (get-pg-table-rows pg-spec table)
+        ;mock-rows         (get-mock-pg-rows 60000)
+        rows              pg-table-rows 
         ;_                 (pprint (take 2 rows))
         data-tx-data      (map datomize-pg-row rows)
         ;_                 (pprint (take 2 data-tx-data))
