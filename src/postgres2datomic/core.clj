@@ -125,17 +125,17 @@
         schema-tx-data    (map datomize-pg-col pg-table-cols)
         ;_                 (pprint (take 1 schema-tx-data))
         ; pg-table-rows     (get-pg-table-rows pg-spec table)
-        mock-rows         (get-mock-pg-rows 20)
+        mock-rows         (get-mock-pg-rows 60000)
         rows              mock-rows
-        _                 (pprint (take 2 rows))
+        ;_                 (pprint (take 2 rows))
         data-tx-data      (map datomize-pg-row rows)
-        _                 (pprint (take 2 data-tx-data))
+        ;_                 (pprint (take 2 data-tx-data))
         schema-tx-future  (d/transact datomic-conn schema-tx-data)
         ;_                 (pprint (take 2 data-tx-data))    
         transact          (partial d/transact datomic-conn)
         ]
         (doseq [datom data-tx-data]
-          (pprint @(transact [datom])))
+          (transact [datom]))
         (def db (d/db datomic-conn))
         (dorun 
           (map pprint [
