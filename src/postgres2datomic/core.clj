@@ -105,7 +105,7 @@
 (defn datomize-pg-table-row [table row]
   "Convert a postgres table row to a datom"
   (conj
-    {:db/id (d/tempid :db.part/db)}
+    {:db/id (d/tempid :db.part/user)}
     (into {} (for [[k v] row  :when (not-nil? v)] 
                   [(keyword (str table "/" (name k))) v]))))
 
