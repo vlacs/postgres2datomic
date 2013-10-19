@@ -109,7 +109,16 @@
     (into {} (for [[k v] row  :when (not-nil? v)] 
                   [(keyword (str table "/" (name k))) v]))))
 
-
+;https://groups.google.com/d/msg/datomic/ZethRt6dqxs/_6012MyD0I8J
+(defn transact-pbatch 
+  "Submit txes in batches of size batch-size, default is 100" 
+  ([conn txes] (transact-pbatch conn txes 100)) 
+  ([conn txes batch-size] 
+     (->> (partition-all batch-size txes) 
+          (pmap #(d/transact-async conn (mapcat identity %))) 
+          (map deref) 
+          dorun) 
+     :ok)) 
   
 (defn main
   "Main - Return db with schema loaded - Can be run from lein repl as shown below"
@@ -134,8 +143,7 @@
         ;_                 (pprint (take 2 data-tx-data))    
         transact          (partial d/transact datomic-conn)
         ]
-        (doseq [datom data-tx-data]
-          (transact [datom]))
+        (transact-pbatch datomic-conn data-tx-data)
         (def db (d/db datomic-conn))
         (dorun 
           (map pprint [
