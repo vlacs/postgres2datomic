@@ -115,7 +115,7 @@
   ([conn txes] (transact-pbatch conn txes 100)) 
   ([conn txes batch-size] 
      (->> (partition-all batch-size txes) 
-          (pmap #(d/transact-async conn (mapcat identity %))) 
+          (pmap #(d/transact-async conn %)) 
           (map deref) 
           dorun) 
      :ok)) 
