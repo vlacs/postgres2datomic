@@ -141,9 +141,11 @@
         ;_                 (pprint (take 2 data-tx-data))
         schema-tx-future  (d/transact datomic-conn schema-tx-data)
         ;_                 (pprint (take 2 data-tx-data))    
-        transact          (partial d/transact datomic-conn)
+        transact-async          (partial d/transact-async datomic-conn)
         ]
-        (transact-pbatch datomic-conn data-tx-data)
+        ;(transact-pbatch datomic-conn data-tx-data)
+        (doseq [datom data-tx-data]
+                  (transact-async [datom]))
         (def db (d/db datomic-conn))
         (dorun 
           (map pprint [
