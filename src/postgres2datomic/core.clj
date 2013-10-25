@@ -128,20 +128,20 @@
         datomize-pg-row   (partial datomize-pg-table-row table)
         pg-table-cols     (get-pg-table-cols pg-spec table)
         schema-tx-data    (map datomize-pg-col pg-table-cols)
-        _                 (pprint (take 2 schema-tx-data))
+        ;_                 (pprint (schema-tx-data))
         pg-table-rows     (get-pg-table-rows pg-spec table limit)
         ;mock-rows         (get-mock-pg-rows 60000)
         rows              pg-table-rows 
         ;_                 (pprint (take 2 rows))
         data-tx-data      (map datomize-pg-row rows)
-        _                 (pprint (take 2 data-tx-data))
+        ;_                 (pprint (take 2 data-tx-data))
         schema-tx-future  (d/transact datomic-conn schema-tx-data)
         ;_                 (pprint schema-tx-future)
-        ;_                 (pprint (take 2 data-tx-data))    
-        transact-async     (partial d/transact datomic-conn)
+        ;_                 (pprint data-tx-data)    
+        transact          (partial d/transact datomic-conn)
         ]
         (doseq [datom data-tx-data]
-                  (transact-async [datom]))
+                  (pprint (transact [datom])))
         (def db (d/db datomic-conn))
         (def rules
           '[[[attr-in-namespace ?e ?ns2]
