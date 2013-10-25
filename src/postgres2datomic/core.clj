@@ -11,7 +11,9 @@
 (def type-map {"character varying" "string"
                "smallint"          "long"
                "bigint"            "long"
-               "text"              "string"})
+               "integer"           "long"
+               "text"              "string"
+               })
 (defn reset-datomic [uri]
   "Return a connection to a new database."
   ;; This will fail if the DB doesn't exist. But who cares?
@@ -32,10 +34,11 @@
   (jdbc/query db
     ["select column_name, data_type from INFORMATION_SCHEMA.COLUMNS where table_name = ?" table]))
 
-(defn get-pg-table-rows [db table]
-  "Query a postgres database table for 100 rows...for now"
+(defn get-pg-table-rows 
+  "Query a postgres database table"
+  [db table limit]
   (jdbc/query db
-    [(str "select * from " table)]))
+    [(str "select * from " table " where username = 'icohen' or username = 'moquist' limit " limit)]))
     
 (defn get-mock-pg-rows [limit]
   "Mock data only works for mdl_user now"
@@ -93,14 +96,17 @@
        :picture 0,
       :idnumber (str %))
     (range 1 (+ 1 limit))))
-
-(defn datomize-pg-table-col [table {:keys[column_name data_type]}]
+    
+(defn datomize-pg-table-col [table upsert_column_name {:keys[column_name data_type]}]
   "Convert a postgres table column to a datom"
-   {:db/id (d/tempid :db.part/db)
-    :db/ident (keyword (str table "/" column_name))
-    :db/valueType (keyword (str "db.type/" (type-map data_type)))
-    :db/cardinality :db.cardinality/one
-    :db.install/_attribute :db.part/db})
+  (merge
+    {:db/id (d/tempid :db.part/db)
+     :db/ident (keyword (str table "/" column_name))
+     :db/valueType (keyword (str "db.type/" (type-map data_type)))
+     :db/cardinality :db.cardinality/one
+     :db.install/_attribute :db.part/db}
+    (when (= upsert_column_name column_name)
+      {:db/unique :db.unique/identity})))
 
 (defn datomize-pg-table-row [table row]
   "Convert a postgres table row to a datom"
@@ -109,56 +115,58 @@
     (into {} (for [[k v] row  :when (not-nil? v)] 
                   [(keyword (str table "/" (name k))) v]))))
 
-;https://groups.google.com/d/msg/datomic/ZethRt6dqxs/_6012MyD0I8J
-(defn transact-pbatch 
-  "Submit txes in batches of size batch-size, default is 100" 
-  ([conn txes] (transact-pbatch conn txes 100)) 
-  ([conn txes batch-size] 
-     (->> (partition-all batch-size txes) 
-          (pmap #(d/transact-async conn %)) 
-          (map deref) 
-          dorun) 
-     :ok)) 
-  
 (defn main
   "Main - Return db with schema loaded - Can be run from lein repl as shown below"
-  ;Postgres2datomic.core=>  (do (require (ns-name *ns*) :reload-all)(main "mdl_user"))
-  [table]
+  ;Postgres2datomic.core=>  (do (require (ns-name *ns*) :reload-all)(main "mdl_sis_user_hist" :upsert_column_name "sis_user_idstr"))
+  [table & {:keys [limit upsert_column_name] 
+            :or {limit 100000}}]
   (let [config            (edn/read-string (slurp "config.edn")) 
         pg-spec           (:postgres config)
         datomic-uri       (get-in config [:datomic :uri])
         datomic-conn      (reset-datomic datomic-uri)
-        datomize-pg-col   (partial datomize-pg-table-col table)
+        datomize-pg-col   (partial datomize-pg-table-col table upsert_column_name)
         datomize-pg-row   (partial datomize-pg-table-row table)
         pg-table-cols     (get-pg-table-cols pg-spec table)
         schema-tx-data    (map datomize-pg-col pg-table-cols)
-        ;_                 (pprint (take 1 schema-tx-data))
-        pg-table-rows     (get-pg-table-rows pg-spec table)
+        _                 (pprint (take 2 schema-tx-data))
+        pg-table-rows     (get-pg-table-rows pg-spec table limit)
         ;mock-rows         (get-mock-pg-rows 60000)
         rows              pg-table-rows 
         ;_                 (pprint (take 2 rows))
         data-tx-data      (map datomize-pg-row rows)
-        ;_                 (pprint (take 2 data-tx-data))
+        _                 (pprint (take 2 data-tx-data))
         schema-tx-future  (d/transact datomic-conn schema-tx-data)
+        ;_                 (pprint schema-tx-future)
         ;_                 (pprint (take 2 data-tx-data))    
-        transact-async          (partial d/transact-async datomic-conn)
+        transact-async     (partial d/transact datomic-conn)
         ]
-        ;(transact-pbatch datomic-conn data-tx-data)
         (doseq [datom data-tx-data]
                   (transact-async [datom]))
         (def db (d/db datomic-conn))
+        (def rules
+          '[[[attr-in-namespace ?e ?ns2]
+             [?e :db/ident ?a]
+             [?e :db/valueType]
+             [(namespace ?a) ?ns1]
+             [(= ?ns1 ?ns2)]]])
         (dorun 
-          (map pprint [
-            "count all records with idnumber"
+          (map pprint [                 
+           ; "list all attributes in the table namespace"     
+           ; (d/q '[:find ?e
+           ;        :in $ ?t
+           ;        :where
+           ;        [?e :db/valueType]
+           ;        [?e :db/ident ?a]
+           ;        [(namespace ?a) ?ns]
+           ;        [(= ?ns ?t)]]
+           ;      db table)
+            (str "count all entities possessing *any* " table " attribute")
             (d/q '[:find (count ?e)
-                   :where [?e :mdl_user/idnumber]]
-                 db)
-            ; "get all records with first name user-1"     
-            ; (d/q '[:find ?e
-            ;        :in $ ?firstname
-            ;        :where [?e :mdl_user/firstname ?firstname]]
-            ;      db
-            ;      "user-1")
+                 :in $ % ?t
+                   :where
+                   (attr-in-namespace ?a ?t)
+                   [?e ?a]]
+                 db rules table)
                  ]))))
 
 
