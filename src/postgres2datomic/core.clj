@@ -127,7 +127,13 @@
         datomize-pg-col   (partial datomize-pg-table-col table upsert_column_name)
         datomize-pg-row   (partial datomize-pg-table-row table)
         pg-table-cols     (get-pg-table-cols pg-spec table)
-        schema-tx-data    (map datomize-pg-col pg-table-cols)
+        schema-tx-data    (conj (map datomize-pg-col pg-table-cols)
+                                {:db/id (d/tempid :db.part/db)
+                                 :db/ident :pg/timecreated
+                                 :db/valueType :db.type/instant
+                                 :db/cardinality :db.cardinality/one
+                                 :db.install/_attribute :db.part/db})
+                               
         ;_                 (pprint (schema-tx-data))
         pg-table-rows     (get-pg-table-rows pg-spec table limit)
         ;mock-rows         (get-mock-pg-rows 60000)
@@ -136,13 +142,21 @@
         data-tx-data      (map datomize-pg-row rows)
         ;_                 (pprint (take 2 data-tx-data))
         schema-tx-future  (d/transact datomic-conn schema-tx-data)
-        ;_                 (pprint schema-tx-future)
+        _                 (pprint schema-tx-future)
         ;_                 (pprint data-tx-data)    
         transact          (partial d/transact datomic-conn)
         ]
         (doseq [datom data-tx-data]
-                  (pprint (transact [datom])))
+                  (pprint 
+                    (transact 
+                      [ datom, 
+                        {:db/id (d/tempid :db.part/tx)
+                        :pg/timecreated (->> datom
+                                          ((keyword (str table "/timecreated")))
+                                          (* 1000)
+                                          (java.sql.Timestamp. ))}])))
         (def db (d/db datomic-conn))
+        (def conn datomic-conn)
         (def rules
           '[[[attr-in-namespace ?e ?ns2]
              [?e :db/ident ?a]
@@ -167,6 +181,27 @@
                    (attr-in-namespace ?a ?t)
                    [?e ?a]]
                  db rules table)
-                 ]))))
+            "tx-instants"
+           (def tx-instants (reverse (sort (d/q '[:find ?when :where [_ :db/txInstant ?when]]
+                                                  db))))
+            "my user"
+            (def me (d/q '[:find ?e :where [?e :mdl_sis_user_hist/username "icohen"]] db))
+            "history of me"
+            (->> (d/q '[:find ?aname ?v ?tx ?inst ?added
+                        :in $ ?e
+                        :where
+                        [?e ?a ?v ?tx ?added]
+                        [?a :db/ident ?aname]
+                        [?tx :db/txInstant ?inst]]
+                      (d/history db)
+                      (:db/id me))
+                 seq
+                 (sort-by #(nth % 2)))
+            ]))))
+   
+      
+
+
+                
 
 
