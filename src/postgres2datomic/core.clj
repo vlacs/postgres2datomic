@@ -6,6 +6,24 @@
             [clojure.pprint :refer [pprint]])
   (:gen-class))
 
+
+; Begin https://github.com/Datomic/day-of-datomic/blob/master/src/datomic/samples/query.clj helper functions 
+(defn only
+  "Return the only item from a query result"
+  [query-result]
+  (assert (= 1 (count query-result)))
+  (assert (= 1 (count (first query-result))))
+  (ffirst query-result))
+
+  
+(defn qe
+  "Returns the single entity returned by a query."
+  [query db & args]
+  (let [res (apply d/q query db args)]
+    (d/entity db (only res))))
+  
+; end https://github.com/Datomic/day-of-datomic/blob/master/src/datomic/samples/query.clj helper functions 
+
 (def not-nil? (complement nil?))
   
 (def type-map {"character varying" "string"
@@ -115,6 +133,23 @@
     (into {} (for [[k v] row  :when (not-nil? v)] 
                   [(keyword (str table "/" (name k))) v]))))
 
+
+(defn entity-attribute-history [e aname]
+  "Get history of entity attribute values"
+  (->> (d/q '[:find ?aname ?v ?timecreated
+              :in $ ?e ?aname
+              :where
+              [?e ?a ?v ?tx ?added]
+              [?a :db/ident ?aname]
+              [(= ?added true)]
+              [?tx :pg/timecreated ?timecreated]]
+            (d/history db)
+            e aname)
+       seq
+       (sort-by #(nth % 2))))
+
+
+                  
 (defn main
   "Main - Return db with schema loaded - Can be run from lein repl as shown below"
   ;Postgres2datomic.core=>  (do (require (ns-name *ns*) :reload-all)(main "mdl_sis_user_hist" :upsert_column_name "sis_user_idstr"))
@@ -184,22 +219,14 @@
             "tx-instants"
            (def tx-instants (reverse (sort (d/q '[:find ?when :where [_ :db/txInstant ?when]]
                                                   db))))
-            "my user"
-            (def me (d/q '[:find ?e :where [?e :mdl_sis_user_hist/username "icohen"]] db))
-            "history of me"
-            (->> (d/q '[:find ?aname ?v ?tx ?inst ?added
-                        :in $ ?e
-                        :where
-                        [?e ?a ?v ?tx ?added]
-                        [?a :db/ident ?aname]
-                        [?tx :db/txInstant ?inst]]
-                      (d/history db)
-                      (:db/id me))
-                 seq
-                 (sort-by #(nth % 2)))
+            "a user"
+            (def a-user (qe '[:find ?e :where [?e :mdl_sis_user_hist/username "icohen"]] db))
+            (str "history of " (:mdl_sis_user_hist/username a-user) "'s passwords")
+            (entity-attribute-history (:db/id a-user) :mdl_sis_user_hist/password)
             ]))))
    
       
+
 
 
                 
