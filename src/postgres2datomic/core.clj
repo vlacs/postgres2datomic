@@ -147,8 +147,24 @@
             e aname)
        seq
        (sort-by #(nth % 2))))
-
-
+(defn get-config []
+   (edn/read-string (slurp "config.edn")) 
+  )
+(defn get-pg-spec [& {:keys [config]
+                      :or {config (get-config)}}]
+  (:postgres config))
+  
+(defn get-pg-schema-tx-data [table & {:keys [upsert-column-name pg-spec] 
+                                              :or {pg-spec (get-pg-spec)}}]
+  (let [datomize-pg-col   (partial datomize-pg-table-col table upsert-column-name)
+        pg-table-cols     (get-pg-table-cols pg-spec table)
+        schema-tx-data    (conj (map datomize-pg-col pg-table-cols)
+                                {:db/id (d/tempid :db.part/db)
+                                 :db/ident :pg/timecreated
+                                 :db/valueType :db.type/instant
+                                 :db/cardinality :db.cardinality/one
+                                 :db.install/_attribute :db.part/db})]
+          schema-tx-data))
                   
 (defn main
   "Main - Return db with schema loaded - Can be run from lein repl as shown below"
@@ -159,17 +175,11 @@
         pg-spec           (:postgres config)
         datomic-uri       (get-in config [:datomic :uri])
         datomic-conn      (reset-datomic datomic-uri)
-        datomize-pg-col   (partial datomize-pg-table-col table upsert_column_name)
         datomize-pg-row   (partial datomize-pg-table-row table)
-        pg-table-cols     (get-pg-table-cols pg-spec table)
-        schema-tx-data    (conj (map datomize-pg-col pg-table-cols)
-                                {:db/id (d/tempid :db.part/db)
-                                 :db/ident :pg/timecreated
-                                 :db/valueType :db.type/instant
-                                 :db/cardinality :db.cardinality/one
-                                 :db.install/_attribute :db.part/db})
-                               
-        ;_                 (pprint (schema-tx-data))
+        schema-tx-data    (get-pg-schema-tx-data 
+                            table 
+                            :upsert-column-name upsert_column_name 
+                            :pg-spec pg-spec) 
         pg-table-rows     (get-pg-table-rows pg-spec table limit)
         ;mock-rows         (get-mock-pg-rows 60000)
         rows              pg-table-rows 
@@ -179,8 +189,7 @@
         schema-tx-future  (d/transact datomic-conn schema-tx-data)
         _                 (pprint schema-tx-future)
         ;_                 (pprint data-tx-data)    
-        transact          (partial d/transact datomic-conn)
-        ]
+        transact          (partial d/transact datomic-conn)]
         (doseq [datom data-tx-data]
                   (pprint 
                     (transact 
