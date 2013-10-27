@@ -6,8 +6,8 @@
             [clojure.pprint :refer [pprint]])
   (:gen-class))
 
+; Some helper functions from  https://github.com/Datomic/day-of-datomic/blob/master/src/datomic/samples/query.clj 
 
-; Begin https://github.com/Datomic/day-of-datomic/blob/master/src/datomic/samples/query.clj helper functions 
 (defn only
   "Return the only item from a query result"
   [query-result]
@@ -22,8 +22,6 @@
   (let [res (apply d/q query db args)]
     (d/entity db (only res))))
   
-; end https://github.com/Datomic/day-of-datomic/blob/master/src/datomic/samples/query.clj helper functions 
-
 (def not-nil? (complement nil?))
   
 (def type-map {"character varying" "string"
@@ -147,6 +145,7 @@
             e aname)
        seq
        (sort-by #(nth % 2))))
+       
 (defn get-config []
    (edn/read-string (slurp "config.edn")) 
   )
@@ -157,51 +156,61 @@
 (defn get-pg-schema-tx-data [table & {:keys [upsert-column-name 
                                              pg-spec
                                              edn-output-file] 
-                                              :or {pg-spec (get-pg-spec)}}]
+                                      :or {pg-spec (get-pg-spec)}}]
   (let [datomize-pg-col   (partial datomize-pg-table-col table upsert-column-name)
         pg-table-cols     (get-pg-table-cols pg-spec table)
-        schema-tx-data    (conj (map datomize-pg-col pg-table-cols)
-                                {:db/id (d/tempid :db.part/db)
+        timecreated-datom {:db/id (d/tempid :db.part/db)
                                  :db/ident :pg/timecreated
                                  :db/valueType :db.type/instant
                                  :db/cardinality :db.cardinality/one
-                                 :db.install/_attribute :db.part/db})]
-          (when-not nil edn-output-file
-            (spit edn-output-file (pr-str schema-tx-data)))
-          schema-tx-data))
-                  
+                                 :db.install/_attribute :db.part/db}
+        schema-tx-data    (conj (map datomize-pg-col pg-table-cols)
+                                timecreated-datom)]
+    (when-not nil edn-output-file
+      (spit edn-output-file (pr-str schema-tx-data)))
+    schema-tx-data))
+
+(defn get-pg-rows-tx-data [table limit & {:keys [pg-spec
+                                                 edn-output-file] 
+                                          :or {pg-spec (get-pg-spec)}}]
+  (let [datomize-pg-row   (partial datomize-pg-table-row table)
+        rows              (get-pg-table-rows pg-spec table limit)
+        rows-tx-data      (map datomize-pg-row rows)]
+    (when-not nil edn-output-file
+      (spit edn-output-file (pr-str rows-tx-data)))
+    rows-tx-data))
+                
 (defn main
   "Main - Return db with schema loaded - Can be run from lein repl as shown below"
   ;Postgres2datomic.core=>  (do (require (ns-name *ns*) :reload-all)(main "mdl_sis_user_hist" :upsert_column_name "sis_user_idstr"))
   [table & {:keys [limit 
                    upsert_column_name 
-                   edn-output-file] 
+                   schema-edn-output-file
+                   rows-edn-output-file] 
             :or { limit 100000
-                  edn-output-file "schema.edn"
+                  schema-edn-output-file "schema.edn"
+                  rows-edn-output-file   "rows.edn"
+                  
                 }}]
   (let [config            (edn/read-string (slurp "config.edn")) 
         pg-spec           (:postgres config)
         datomic-uri       (get-in config [:datomic :uri])
         datomic-conn      (reset-datomic datomic-uri)
-        datomize-pg-row   (partial datomize-pg-table-row table)
+        
         schema-tx-data    (get-pg-schema-tx-data 
                             table 
-                            :upsert-column-name upsert_column_name 
                             :pg-spec pg-spec
-                            :edn-output-file edn-output-file) 
-        pg-table-rows     (get-pg-table-rows pg-spec table limit)
-        ;mock-rows         (get-mock-pg-rows 60000)
-        rows              pg-table-rows 
-        ;_                 (pprint (take 2 rows))
-        data-tx-data      (map datomize-pg-row rows)
-        ;_                 (pprint (take 2 data-tx-data))
-        schema-tx-future  (d/transact datomic-conn schema-tx-data)
-        _                 (pprint schema-tx-future)
-        ;_                 (pprint data-tx-data)    
-        transact          (partial d/transact datomic-conn)]
-        (doseq [datom data-tx-data]
+                            :edn-output-file schema-edn-output-file
+                            :upsert-column-name upsert_column_name) 
+        rows-tx-data      (get-pg-rows-tx-data 
+                            table 
+                            limit
+                            :pg-spec pg-spec
+                            :edn-output-file rows-edn-output-file)]
+        (d/transact datomic-conn schema-tx-data)
+        (doseq [datom rows-tx-data]
                   (pprint 
-                    (transact 
+                    ((partial d/transact datomic-conn) 
                       [ datom, 
                         {:db/id (d/tempid :db.part/tx)
                         :pg/timecreated (->> datom
