@@ -154,7 +154,9 @@
                       :or {config (get-config)}}]
   (:postgres config))
   
-(defn get-pg-schema-tx-data [table & {:keys [upsert-column-name pg-spec] 
+(defn get-pg-schema-tx-data [table & {:keys [upsert-column-name 
+                                             pg-spec
+                                             edn-output-file] 
                                               :or {pg-spec (get-pg-spec)}}]
   (let [datomize-pg-col   (partial datomize-pg-table-col table upsert-column-name)
         pg-table-cols     (get-pg-table-cols pg-spec table)
@@ -164,13 +166,19 @@
                                  :db/valueType :db.type/instant
                                  :db/cardinality :db.cardinality/one
                                  :db.install/_attribute :db.part/db})]
+          (when-not nil edn-output-file
+            (spit edn-output-file (pr-str schema-tx-data)))
           schema-tx-data))
                   
 (defn main
   "Main - Return db with schema loaded - Can be run from lein repl as shown below"
   ;Postgres2datomic.core=>  (do (require (ns-name *ns*) :reload-all)(main "mdl_sis_user_hist" :upsert_column_name "sis_user_idstr"))
-  [table & {:keys [limit upsert_column_name] 
-            :or {limit 100000}}]
+  [table & {:keys [limit 
+                   upsert_column_name 
+                   edn-output-file] 
+            :or { limit 100000
+                  edn-output-file "schema.edn"
+                }}]
   (let [config            (edn/read-string (slurp "config.edn")) 
         pg-spec           (:postgres config)
         datomic-uri       (get-in config [:datomic :uri])
@@ -179,7 +187,8 @@
         schema-tx-data    (get-pg-schema-tx-data 
                             table 
                             :upsert-column-name upsert_column_name 
-                            :pg-spec pg-spec) 
+                            :pg-spec pg-spec
+                            :edn-output-file edn-output-file) 
         pg-table-rows     (get-pg-table-rows pg-spec table limit)
         ;mock-rows         (get-mock-pg-rows 60000)
         rows              pg-table-rows 
