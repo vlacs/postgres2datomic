@@ -244,8 +244,9 @@
                    [?e ?a]]
                  db rules table)
             "tx-instants"
-           (def tx-instants (reverse (sort (d/q '[:find ?when :where [_ :db/txInstant ?when]]
-                                                  db))))
+            (reverse (sort (d/q '[:find ?when :where [_ :db/txInstant ?when]] db)))
+            "timecreateds"
+            (reverse (sort (d/q '[:find ?when :where [_ :pg/timecreated ?when]] db)))
             "a user"
             (def a-user (qe '[:find ?e :where [?e :mdl_sis_user_hist/username "icohen"]] db))
             (str "history of " (:mdl_sis_user_hist/username a-user) "'s passwords")
