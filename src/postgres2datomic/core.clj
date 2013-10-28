@@ -56,63 +56,6 @@
   (jdbc/query db
     [(str "select * from " table " where username = 'icohen' or username = 'moquist' limit " limit)]))
     
-(defn get-mock-pg-rows [limit]
-  "Mock data only works for mdl_user now"
-  (map 
-    #(hash-map
-      :country "",
-       :maildisplay 2,
-       :timemodified 0,
-       :icq "",
-       :yahoo "",
-       :firstaccess 0,
-       :idnumber_vsa nil,
-       :auth "geniusapis",
-       :screenreader 0,
-       :autosubscribe 1,
-       :currentlogin 0,
-       :lastaccess 0,
-       :lastlogin 0,
-       :timezone "America/New_York",
-       :aim "",
-       :confirmed 1,
-       :msn "",
-       :username_vsa nil,
-       :lastip "",
-       :secret "",
-       :htmleditor 1,
-       :city "",
-       :username "user1",
-       :skype "",
-       :policyagreed 1,
-       :imagealt nil,
-       :mailformat 1,
-       :idnumber_int 66244,
-       :lang "en_utf8",
-       :phone1 "",
-       :url "",
-       :email "user1@mailinator.com",
-       :firstname (str "user-" %),
-       :maildigest 0,
-       :phone2 "",
-       :emailstop 0,
-       :mnethostid 1,
-       :department "",
-       :institution "",
-       :trustbitmask 0,
-       :lastname "test",
-       :ajax 1,
-       :theme "",
-       :address "",
-       :id 100387,
-       :password "da6acd4d31d1823cb1583b5071520483",
-       :description nil,
-       :trackforums 0,
-       :deleted 0,
-       :picture 0,
-      :idnumber (str %))
-    (range 1 (+ 1 limit))))
-    
 (defn datomize-pg-table-col [table upsert_column_name {:keys[column_name data_type]}]
   "Convert a postgres table column to a datom"
   (merge
@@ -132,7 +75,7 @@
                   [(keyword (str table "/" (name k))) v]))))
 
 
-(defn entity-attribute-history [e aname]
+(defn entity-attribute-history [db e aname]
   "Get history of entity attribute values"
   (->> (d/q '[:find ?aname ?v ?timecreated
               :in $ ?e ?aname
@@ -152,6 +95,12 @@
 (defn get-pg-spec [& {:keys [config]
                       :or {config (get-config)}}]
   (:postgres config))
+
+(defn get-datomic-conn [& {:keys [config]
+                           :or {config (get-config)}}]
+  (let [datomic-uri       (get-in config [:datomic :uri])
+        datomic-conn      (reset-datomic datomic-uri)]
+    datomic-conn))
   
 (defn get-pg-schema-tx-data [table & {:keys [upsert-column-name 
                                              pg-spec
@@ -179,25 +128,18 @@
     (when-not nil edn-output-file
       (spit edn-output-file (pr-str rows-tx-data)))
     rows-tx-data))
-                
-(defn main
-  "Main - Return db with schema loaded - Can be run from lein repl as shown below"
-  ;Postgres2datomic.core=>  (do (require (ns-name *ns*) :reload-all)(main "mdl_sis_user_hist" :upsert_column_name "sis_user_idstr"))
-  [table & {:keys [limit 
-                   upsert_column_name 
-                   schema-edn-output-file
-                   rows-edn-output-file] 
-            :or { limit 100000
-                  schema-edn-output-file "schema.edn"
-                  rows-edn-output-file   "rows.edn"
-                  
-                }}]
-  (let [config            (edn/read-string (slurp "config.edn")) 
-        pg-spec           (:postgres config)
-        datomic-uri       (get-in config [:datomic :uri])
-        datomic-conn      (reset-datomic datomic-uri)
-        
-        schema-tx-data    (get-pg-schema-tx-data 
+
+
+(defn import-table [table & {:keys [pg-spec
+                                    datomic-conn
+                                    limit 
+                                    upsert_column_name 
+                                    schema-edn-output-file
+                                    rows-edn-output-file] 
+                              :or {limit 100000
+                                   schema-edn-output-file "schema.edn"
+                                   rows-edn-output-file   "rows.edn"}}]
+  (let [schema-tx-data    (get-pg-schema-tx-data 
                             table 
                             :pg-spec pg-spec
                             :edn-output-file schema-edn-output-file
@@ -207,51 +149,75 @@
                             limit
                             :pg-spec pg-spec
                             :edn-output-file rows-edn-output-file)]
-        (d/transact datomic-conn schema-tx-data)
-        (doseq [datom rows-tx-data]
-                  (pprint 
-                    ((partial d/transact datomic-conn) 
-                      [ datom, 
-                        {:db/id (d/tempid :db.part/tx)
-                        :pg/timecreated (->> datom
-                                          ((keyword (str table "/timecreated")))
-                                          (* 1000)
-                                          (java.sql.Timestamp. ))}])))
-        (def db (d/db datomic-conn))
-        (def conn datomic-conn)
-        (def rules
-          '[[[attr-in-namespace ?e ?ns2]
-             [?e :db/ident ?a]
-             [?e :db/valueType]
-             [(namespace ?a) ?ns1]
-             [(= ?ns1 ?ns2)]]])
-        (dorun 
-          (map pprint [                 
-           ; "list all attributes in the table namespace"     
-           ; (d/q '[:find ?e
-           ;        :in $ ?t
-           ;        :where
-           ;        [?e :db/valueType]
-           ;        [?e :db/ident ?a]
-           ;        [(namespace ?a) ?ns]
-           ;        [(= ?ns ?t)]]
-           ;      db table)
-            (str "count all entities possessing *any* " table " attribute")
-            (d/q '[:find (count ?e)
-                 :in $ % ?t
-                   :where
-                   (attr-in-namespace ?a ?t)
-                   [?e ?a]]
-                 db rules table)
-            "tx-instants"
-            (reverse (sort (d/q '[:find ?when :where [_ :db/txInstant ?when]] db)))
-            "timecreateds"
-            (reverse (sort (d/q '[:find ?when :where [_ :pg/timecreated ?when]] db)))
-            "a user"
-            (def a-user (qe '[:find ?e :where [?e :mdl_sis_user_hist/username "icohen"]] db))
-            (str "history of " (:mdl_sis_user_hist/username a-user) "'s passwords")
-            (entity-attribute-history (:db/id a-user) :mdl_sis_user_hist/password)
-            ]))))
+    (d/transact datomic-conn schema-tx-data)
+    (doseq [datom rows-tx-data]
+              (pprint 
+                ((partial d/transact datomic-conn) 
+                  [ datom, 
+                    {:db/id (d/tempid :db.part/tx)
+                    :pg/timecreated (->> datom
+                                      ((keyword (str table "/timecreated")))
+                                      (* 1000)
+                                      (java.sql.Timestamp. ))}])))))
+
+(defn main
+  "Main - Return db with schema loaded - Can be run from lein repl as shown below"
+  ;Postgres2datomic.core=>  (do (require (ns-name *ns*) :reload-all)(main "mdl_sis_user_hist" :upsert_column_name "sis_user_idstr"))
+  [table & {:keys [limit 
+                   upsert_column_name 
+                   schema-edn-output-file
+                   rows-edn-output-file] 
+            :or {limit 100000
+                schema-edn-output-file "schema.edn"
+                rows-edn-output-file   "rows.edn"}}]
+  (let [config            (edn/read-string (slurp "config.edn")) 
+        pg-spec           (:postgres config)
+        datomic-uri       (get-in config [:datomic :uri])
+        datomic-conn      (reset-datomic datomic-uri)]
+    (import-table 
+      table 
+      :pg-spec                  pg-spec
+      :datomic-conn             datomic-conn
+      :limit                    limit
+      :upsert_column_name       upsert_column_name 
+      :schema-edn-output-file   schema-edn-output-file
+      :rows-edn-output-file     rows-edn-output-file)
+        
+    (def db (d/db datomic-conn))
+    (def conn datomic-conn)
+    (def rules
+      '[[[attr-in-namespace ?e ?ns2]
+         [?e :db/ident ?a]
+         [?e :db/valueType]
+         [(namespace ?a) ?ns1]
+         [(= ?ns1 ?ns2)]]])
+    (dorun 
+      (map pprint [                 
+       ; "list all attributes in the table namespace"     
+       ; (d/q '[:find ?e
+       ;        :in $ ?t
+       ;        :where
+       ;        [?e :db/valueType]
+       ;        [?e :db/ident ?a]
+       ;        [(namespace ?a) ?ns]
+       ;        [(= ?ns ?t)]]
+       ;      db table)
+        (str "count all entities possessing *any* " table " attribute")
+        (d/q '[:find (count ?e)
+             :in $ % ?t
+               :where
+               (attr-in-namespace ?a ?t)
+               [?e ?a]]
+             db rules table)
+        "tx-instants"
+        (reverse (sort (d/q '[:find ?when :where [_ :db/txInstant ?when]] db)))
+        "timecreateds"
+        (reverse (sort (d/q '[:find ?when :where [_ :pg/timecreated ?when]] db)))
+        "a user"
+        (def a-user (qe '[:find ?e :where [?e :mdl_sis_user_hist/username "icohen"]] db))
+        (str "history of " (:mdl_sis_user_hist/username a-user) "'s passwords")
+        (entity-attribute-history db (:db/id a-user) :mdl_sis_user_hist/password)
+        ]))))
    
       
 
