@@ -57,7 +57,7 @@
   (jdbc/query db
     [(str "select * from " table " where username = 'icohen' or username = 'moquist' limit " limit)]))
     
-(defn datomize-pg-table-col [table upsert_column_name {:keys[column_name data_type]}]
+(defn datomize-pg-table-col [table upsert-column-name {:keys[column_name data_type]}]
   "Convert a postgres table column to a datom"
   (merge
     {:db/id (d/tempid :db.part/db)
@@ -65,7 +65,7 @@
      :db/valueType (keyword (str "db.type/" (type-map data_type)))
      :db/cardinality :db.cardinality/one
      :db.install/_attribute :db.part/db}
-    (when (= upsert_column_name column_name)
+    (when (= upsert-column-name column_name)
       {:db/unique :db.unique/identity})))
 
 (defn datom-to-timecreated [table datom]
@@ -87,7 +87,7 @@
                           (into {} (for [[k v] row  :when (not-nil? v)] 
                             [(keyword (str table "/" (name k))) v])))
      timecreated-datom  (->>  row-datom
-                              (partial datom-to-timecreated table)
+                              ((partial datom-to-timecreated table))
                               (timecreated-to-tx-datom))]        
     [row-datom, timecreated-datom]))
 
@@ -149,7 +149,7 @@
 
 (defn table-to-edn [table & {:keys [pg-spec
                                     limit 
-                                    upsert_column_name 
+                                    upsert-column-name 
                                     schema-edn-output-file
                                     rows-edn-output-file] 
                               :or {limit 100000}}]
@@ -157,7 +157,7 @@
                             table 
                             :pg-spec            pg-spec
                             :edn-output-file    schema-edn-output-file
-                            :upsert-column-name upsert_column_name) 
+                            :upsert-column-name upsert-column-name) 
         rows-tx-data      (get-pg-rows-tx-data 
                             table 
                             limit
@@ -173,13 +173,14 @@
 (defn import-rows [table {:keys [datomic-conn
                                  rows-tx-data]}]
   (doseq [datoms rows-tx-data]
+    (pprint datoms)
     ((partial d/transact datomic-conn) 
       datoms)))
 
 (defn import-table [table & {:keys [pg-spec
                                     datomic-conn
                                     limit 
-                                    upsert_column_name 
+                                    upsert-column-name 
                                     schema-edn-output-file
                                     rows-edn-output-file] 
                               :or {limit                  100000
@@ -193,7 +194,8 @@
           :pg-spec                pg-spec
           :schema-edn-output-file schema-edn-output-file
           :rows-edn-output-file   rows-edn-output-file
-          :upsert-column-name     upsert_column_name)] 
+          :upsert-column-name     upsert-column-name)]
+    (dorun (map pprint ["schema-tx-data"  schema-tx-data "rows-tx-data" rows-tx-data]))
     (import-schema 
       table
       {:datomic-conn   datomic-conn
@@ -206,9 +208,9 @@
 
 (defn main
   "Main - Return db with schema loaded - Can be run from lein repl as shown below"
-  ;Postgres2datomic.core=>  (do (require (ns-name *ns*) :reload-all)(main "mdl_sis_user_hist" :upsert_column_name "sis_user_idstr"))
+  ;Postgres2datomic.core=>  (do (require (ns-name *ns*) :reload-all)(main "mdl_sis_user_hist" :upsert-column-name "sis_user_idstr"))
   [table & {:keys [limit 
-                   upsert_column_name 
+                   upsert-column-name 
                    schema-edn-output-file
                    rows-edn-output-file] 
             :or {limit 100000
@@ -223,7 +225,7 @@
       :pg-spec                  pg-spec
       :datomic-conn             datomic-conn
       :limit                    limit
-      :upsert_column_name       upsert_column_name 
+      :upsert-column-name       upsert-column-name 
       :schema-edn-output-file   schema-edn-output-file
       :rows-edn-output-file     rows-edn-output-file)
         
