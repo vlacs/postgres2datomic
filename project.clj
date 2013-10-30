@@ -8,4 +8,4 @@
                  [org.clojure/java.jdbc "0.3.0-alpha5"]
                  [postgresql/postgresql "9.1-901.jdbc4"]]
   :jvm-opts ["-Xmx1g"]
-  :main postgres2datomic.core)
+  :main ^:skip-aot postgres2datomic.core)

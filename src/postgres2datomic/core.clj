@@ -3,8 +3,7 @@
             [datomic.api :as d]
             [clojure.string :as str]
             [clojure.edn :as edn]
-            [clojure.pprint :refer [pprint]])
-  (:gen-class))
+            [clojure.pprint :refer [pprint]]))
 
 ; Some helper functions from  https://github.com/Datomic/day-of-datomic/blob/master/src/datomic/samples/query.clj
 
