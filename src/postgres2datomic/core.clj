@@ -203,6 +203,17 @@
       {:datomic-conn   datomic-conn
        :rows-tx-data   rows-tx-data})))
 
+;; TODO FIX - Using 'main here is odd and misleading. '-main is the symbol
+;; used for something run as the NS/class main entry point. This looks
+;; like that but won't be run via clojure.main or via an AOT jar
+;; execution.
+;;
+;; Further, this main is expecting keywords and numeric
+;; values. If this were used as a proper main file, it would receive
+;; string argumets that you'd need to convert to the desired data
+;; types.
+;;
+;; It would likely be better to call this something other than 'main.
 (defn main
   "Main - Return db with schema loaded - Can be run from lein repl as shown below"
   ;Postgres2datomic.core=>  (do (require (ns-name *ns*) :reload-all)(main "mdl_sis_user_hist" :upsert-column-name "sis_user_idstr"))
