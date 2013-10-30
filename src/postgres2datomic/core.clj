@@ -173,7 +173,6 @@
 (defn import-rows [table {:keys [datomic-conn
                                  rows-tx-data]}]
   (doseq [datoms rows-tx-data]
-    (pprint datoms)
     ((partial d/transact datomic-conn) 
       datoms)))
 
@@ -195,7 +194,6 @@
           :schema-edn-output-file schema-edn-output-file
           :rows-edn-output-file   rows-edn-output-file
           :upsert-column-name     upsert-column-name)]
-    (dorun (map pprint ["schema-tx-data"  schema-tx-data "rows-tx-data" rows-tx-data]))
     (import-schema 
       table
       {:datomic-conn   datomic-conn
