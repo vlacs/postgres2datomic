@@ -6,7 +6,7 @@
             [clojure.pprint :refer [pprint]])
   (:gen-class))
 
-; Some helper functions from  https://github.com/Datomic/day-of-datomic/blob/master/src/datomic/samples/query.clj 
+; Some helper functions from  https://github.com/Datomic/day-of-datomic/blob/master/src/datomic/samples/query.clj
 
 (defn only
   "Return the only item from a query result"
@@ -16,15 +16,15 @@
   (assert (= 1 (count (first query-result))))
   (ffirst query-result))
 
-  
+
 (defn qe
   "Returns the single entity returned by a query."
   [query db & args]
   (let [res (apply d/q query db args)]
     (d/entity db (only res))))
-  
+
 (def not-nil? (complement nil?))
-  
+
 (def type-map {"character varying" "string"
                "smallint"          "long"
                "bigint"            "long"
@@ -51,12 +51,12 @@
   (jdbc/query db
     ["select column_name, data_type from INFORMATION_SCHEMA.COLUMNS where table_name = ?" table]))
 
-(defn get-pg-table-rows 
+(defn get-pg-table-rows
   "Query a postgres database table"
   [db table limit]
   (jdbc/query db
     [(str "select * from " table " where username = 'icohen' or username = 'moquist' limit " limit)]))
-    
+
 (defn datomize-pg-table-col [table upsert-column-name {:keys[column_name data_type]}]
   "Convert a postgres table column to a datom"
   (merge
@@ -73,7 +73,7 @@
     ((keyword (str table "/timecreated")))
     (* 1000)
     (java.sql.Timestamp. )))
-    
+
 (defn timecreated-to-tx-datom [ timecreated ]
   {:db/id (d/tempid :db.part/tx)
   :pg/timecreated timecreated})
@@ -81,14 +81,14 @@
 
 (defn datomize-pg-table-row [table row]
   "Convert a postgres table row to a datom"
-  (let 
+  (let
     [row-datom          (conj
                           {:db/id (d/tempid :db.part/user)}
-                          (into {} (for [[k v] row  :when (not-nil? v)] 
+                          (into {} (for [[k v] row  :when (not-nil? v)]
                             [(keyword (str table "/" (name k))) v])))
      timecreated-datom  (->>  row-datom
                               ((partial datom-to-timecreated table))
-                              (timecreated-to-tx-datom))]        
+                              (timecreated-to-tx-datom))]
     [row-datom, timecreated-datom]))
 
 
@@ -105,7 +105,7 @@
             e aname)
        seq
        (sort-by #(nth % 2))))
-       
+
 (defn get-config []
    (edn/read-string (slurp "config.edn")))
 
@@ -118,10 +118,10 @@
   (let [datomic-uri       (get-in config [:datomic :uri])
         datomic-conn      (reset-datomic datomic-uri)]
     datomic-conn))
-  
-(defn get-pg-schema-tx-data [table & {:keys [upsert-column-name 
+
+(defn get-pg-schema-tx-data [table & {:keys [upsert-column-name
                                              pg-spec
-                                             edn-output-file] 
+                                             edn-output-file]
                                       :or {pg-spec (get-pg-spec)}}]
   (let [datomize-pg-col   (partial datomize-pg-table-col table upsert-column-name)
         pg-table-cols     (get-pg-table-cols pg-spec table)
@@ -137,7 +137,7 @@
     schema-tx-data))
 
 (defn get-pg-rows-tx-data [table limit & {:keys [pg-spec
-                                                 edn-output-file] 
+                                                 edn-output-file]
                                           :or {pg-spec (get-pg-spec)}}]
   (let [datomize-pg-row   (partial datomize-pg-table-row table)
         rows              (get-pg-table-rows pg-spec table limit)
@@ -148,18 +148,18 @@
 
 
 (defn table-to-edn [table & {:keys [pg-spec
-                                    limit 
-                                    upsert-column-name 
+                                    limit
+                                    upsert-column-name
                                     schema-edn-output-file
-                                    rows-edn-output-file] 
+                                    rows-edn-output-file]
                               :or {limit 100000}}]
-  (let [schema-tx-data    (get-pg-schema-tx-data 
-                            table 
+  (let [schema-tx-data    (get-pg-schema-tx-data
+                            table
                             :pg-spec            pg-spec
                             :edn-output-file    schema-edn-output-file
-                            :upsert-column-name upsert-column-name) 
-        rows-tx-data      (get-pg-rows-tx-data 
-                            table 
+                            :upsert-column-name upsert-column-name)
+        rows-tx-data      (get-pg-rows-tx-data
+                            table
                             limit
                             :pg-spec            pg-spec
                             :edn-output-file    rows-edn-output-file)]
@@ -167,38 +167,38 @@
 
 
 (defn import-schema [table {:keys [datomic-conn
-                                   schema-tx-data]}]  
+                                   schema-tx-data]}]
   (d/transact datomic-conn schema-tx-data))
 
 (defn import-rows [table {:keys [datomic-conn
                                  rows-tx-data]}]
   (doseq [datoms rows-tx-data]
-    ((partial d/transact datomic-conn) 
+    ((partial d/transact datomic-conn)
       datoms)))
 
 (defn import-table [table & {:keys [pg-spec
                                     datomic-conn
-                                    limit 
-                                    upsert-column-name 
+                                    limit
+                                    upsert-column-name
                                     schema-edn-output-file
-                                    rows-edn-output-file] 
+                                    rows-edn-output-file]
                               :or {limit                  100000
                                    schema-edn-output-file "schema.edn"
                                    rows-edn-output-file   "rows.edn"}}]
-  (let [{schema-tx-data   :schema 
+  (let [{schema-tx-data   :schema
          rows-tx-data     :rows}
-        (table-to-edn 
-          table 
+        (table-to-edn
+          table
           :limit                  limit
           :pg-spec                pg-spec
           :schema-edn-output-file schema-edn-output-file
           :rows-edn-output-file   rows-edn-output-file
           :upsert-column-name     upsert-column-name)]
-    (import-schema 
+    (import-schema
       table
       {:datomic-conn   datomic-conn
        :schema-tx-data schema-tx-data})
-      
+
     (import-rows
       table
       {:datomic-conn   datomic-conn
@@ -207,26 +207,26 @@
 (defn main
   "Main - Return db with schema loaded - Can be run from lein repl as shown below"
   ;Postgres2datomic.core=>  (do (require (ns-name *ns*) :reload-all)(main "mdl_sis_user_hist" :upsert-column-name "sis_user_idstr"))
-  [table & {:keys [limit 
-                   upsert-column-name 
+  [table & {:keys [limit
+                   upsert-column-name
                    schema-edn-output-file
-                   rows-edn-output-file] 
+                   rows-edn-output-file]
             :or {limit 100000
                 schema-edn-output-file "schema.edn"
                 rows-edn-output-file   "rows.edn"}}]
-  (let [config            (edn/read-string (slurp "config.edn")) 
+  (let [config            (edn/read-string (slurp "config.edn"))
         pg-spec           (:postgres config)
         datomic-uri       (get-in config [:datomic :uri])
         datomic-conn      (reset-datomic datomic-uri)]
-    (import-table 
-      table 
+    (import-table
+      table
       :pg-spec                  pg-spec
       :datomic-conn             datomic-conn
       :limit                    limit
-      :upsert-column-name       upsert-column-name 
+      :upsert-column-name       upsert-column-name
       :schema-edn-output-file   schema-edn-output-file
       :rows-edn-output-file     rows-edn-output-file)
-        
+
     (def db (d/db datomic-conn))
     (def conn datomic-conn)
     (def rules
@@ -235,9 +235,9 @@
          [?e :db/valueType]
          [(namespace ?a) ?ns1]
          [(= ?ns1 ?ns2)]]])
-    (dorun 
-      (map pprint [                 
-       ; "list all attributes in the table namespace"     
+    (dorun
+      (map pprint [
+       ; "list all attributes in the table namespace"
        ; (d/q '[:find ?e
        ;        :in $ ?t
        ;        :where
@@ -260,13 +260,5 @@
         "a user"
         (def a-user (qe '[:find ?e :where [?e :mdl_sis_user_hist/username "icohen"]] db))
         (str "history of " (:mdl_sis_user_hist/username a-user) "'s passwords")
-        (entity-attribute-history db (:db/id a-user) :mdl_sis_user_hist/password)
-        ]))))
-   
-      
-
-
-
-                
-
+        (entity-attribute-history db (:db/id a-user) :mdl_sis_user_hist/password)]))))
 
