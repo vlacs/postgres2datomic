@@ -28,8 +28,8 @@
                "smallint"          "long"
                "bigint"            "long"
                "integer"           "long"
-               "text"              "string"
-               })
+               "text"              "string"})
+
 (defn reset-datomic [uri]
   "Return a connection to a new database."
   ;; This will fail if the DB doesn't exist. But who cares?
@@ -38,12 +38,18 @@
   (d/create-database uri)
   (d/connect uri))
 
+;; TODO Not used.
 (defn keywordize [s]
   "Convert a string to an idomatic keyword"
   (-> (str/lower-case s)
       (str/replace "_" "-")
       (str/replace "." "-")
       (keyword)))
+
+
+(def import-defaults {:limit                  100000
+                      :schema-edn-output-file "schema.edn"
+                      :rows-edn-output-file   "rows.edn"})
 
 (defn get-pg-table-cols [db table]
   "Query a postgres database for table columns and data types"
@@ -152,8 +158,8 @@
                                     schema-edn-output-file
                                     rows-edn-output-file]
                               :or {limit 100000}}]
-  (let [schema-tx-data    (get-pg-schema-tx-data
-                            table
+  (let [import-spec (merge import-defaults import-args)
+        schema-tx-data    (get-pg-schema-tx-data table
                             :pg-spec            pg-spec
                             :edn-output-file    schema-edn-output-file
                             :upsert-column-name upsert-column-name)
@@ -162,7 +168,7 @@
                             limit
                             :pg-spec            pg-spec
                             :edn-output-file    rows-edn-output-file)]
-    {:table table :schema schema-tx-data :rows rows-tx-data}))
+    {:table table :schema-tx-data schema-tx-data :rows-tx-data rows-tx-data}))
 
 
 (defn import-schema [table {:keys [datomic-conn
@@ -175,33 +181,11 @@
     ((partial d/transact datomic-conn)
       datoms)))
 
-(defn import-table [table & {:keys [pg-spec
-                                    datomic-conn
-                                    limit
-                                    upsert-column-name
-                                    schema-edn-output-file
-                                    rows-edn-output-file]
-                              :or {limit                  100000
-                                   schema-edn-output-file "schema.edn"
-                                   rows-edn-output-file   "rows.edn"}}]
-  (let [{schema-tx-data   :schema
-         rows-tx-data     :rows}
-        (table-to-edn
-          table
-          :limit                  limit
-          :pg-spec                pg-spec
-          :schema-edn-output-file schema-edn-output-file
-          :rows-edn-output-file   rows-edn-output-file
-          :upsert-column-name     upsert-column-name)]
-    (import-schema
-      table
-      {:datomic-conn   datomic-conn
-       :schema-tx-data schema-tx-data})
-
-    (import-rows
-      table
-      {:datomic-conn   datomic-conn
-       :rows-tx-data   rows-tx-data})))
+(defn import-table [table import-args]
+  (let [import-spec (merge import-defaults import-args)
+        table-spec (table-to-edn table import-spec)]
+    (import-schema table table-spec)
+    (import-rows table table-spec)))
 
 ;; TODO FIX - Using 'main here is odd and misleading. '-main is the symbol
 ;; used for something run as the NS/class main entry point. This looks
@@ -217,25 +201,20 @@
 (defn main
   "Main - Return db with schema loaded - Can be run from lein repl as shown below"
   ;Postgres2datomic.core=>  (do (require (ns-name *ns*) :reload-all)(main "mdl_sis_user_hist" :upsert-column-name "sis_user_idstr"))
-  [table & {:keys [limit
-                   upsert-column-name
-                   schema-edn-output-file
-                   rows-edn-output-file]
-            :or {limit 100000
-                schema-edn-output-file "schema.edn"
-                rows-edn-output-file   "rows.edn"}}]
+  [table {:keys [limit
+                 upsert-column-name
+                 schema-edn-output-file
+                 rows-edn-output-file]
+          :as import-args}]
   (let [config            (edn/read-string (slurp "config.edn"))
         pg-spec           (:postgres config)
         datomic-uri       (get-in config [:datomic :uri])
-        datomic-conn      (reset-datomic datomic-uri)]
-    (import-table
-      table
-      :pg-spec                  pg-spec
-      :datomic-conn             datomic-conn
-      :limit                    limit
-      :upsert-column-name       upsert-column-name
-      :schema-edn-output-file   schema-edn-output-file
-      :rows-edn-output-file     rows-edn-output-file)
+        datomic-conn      (reset-datomic datomic-uri)
+        import-spec (merge {:pg-spec pg-spec
+                            :datomic-conn datomic-conn}
+                           import-defaults
+                           import-args)]
+    (import-table table import-spec)
 
     (def db (d/db datomic-conn))
     (def conn datomic-conn)
