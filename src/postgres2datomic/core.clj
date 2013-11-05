@@ -168,8 +168,8 @@
   (d/transact datomic-conn schema-tx-data))
 
 
-(defn import-rows [table {:keys [datomic-conn
-                                 rows-tx-data]}]
+(defn import-rows [{:keys [datomic-conn
+                          rows-tx-data]}]
   (doseq [datoms rows-tx-data]
     ((partial d/transact datomic-conn)
       datoms)))
@@ -180,11 +180,13 @@
                             limit
                             datomic-conn]
                      :as fn-args}]
-  
-  (let [import-spec (merge default-args fn-args)
-        table-spec (table-to-edn import-spec)]
-    (import-schema table-spec)
-    (import-rows table-spec)))
+  (let [import-spec (merge 
+                      default-args 
+                      fn-args)
+        table-spec (table-to-edn import-spec)
+        param-spec (merge import-spec table-spec)]
+    (import-schema param-spec)
+    (import-rows param-spec)))
 
 
 (defn import-table-and-query
