@@ -168,18 +168,18 @@
      :rows-tx-data      rows-tx-data}))
 
 
-(defn import-schema [{:keys [datomic-conn
+(defn import-schema! [{:keys [datomic-conn
                              schema-tx-data]}]
   (d/transact datomic-conn schema-tx-data))
 
 
-(defn import-rows [{:keys [datomic-conn
+(defn import-rows! [{:keys [datomic-conn
                           rows-tx-data]}]
   (doseq [datoms rows-tx-data]
     (d/transact datomic-conn datoms)))
 
 
-(defn import-table [{:keys [pg-spec
+(defn import-table! [{:keys [pg-spec
                             table
                             limit
                             datomic-conn]
@@ -189,8 +189,8 @@
                       fn-args)
         table-spec (table-to-edn import-spec)
         param-spec (merge import-spec table-spec)]
-    (import-schema param-spec)
-    (import-rows param-spec)))
+    (import-schema! param-spec)
+    (import-rows! param-spec)))
 
 
 (defn query-table [{:keys [ table
@@ -230,7 +230,7 @@
          (entity-attribute-history db (:db/id a-user) :mdl_sis_user_hist/password)]))))
 
 
-(defn import-table-and-query
+(defn import-table-and-query!
   "Debugging fn. Probably delete this later...
    Returns import-spec"
   ;Postgres2datomic.core=>  (do (require (ns-name *ns*) :reload-all)(import-table-and-query "mdl_sis_user_hist" :upsert-column-name "sis_user_idstr"))
@@ -241,6 +241,6 @@
            rows-edn-output-file]
      :as fn-args}]
   (let [import-spec  (merge default-args fn-args)]
-    (import-table import-spec)
+    (import-table! import-spec)
     (query-table import-spec)
     import-spec))
