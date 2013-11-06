@@ -22,7 +22,9 @@
   (let [res (apply d/q query db args)]
     (d/entity db (only res))))
 
+
 (def not-nil? (complement nil?))
+
 
 (def type-map {"character varying" "string"
                "smallint"          "long"
@@ -65,6 +67,7 @@
   (jdbc/query pg-spec
     ["select column_name, data_type from INFORMATION_SCHEMA.COLUMNS where table_name = ?" table]))
 
+
 (defn get-pg-table-rows
   "Query a postgres database table"
   [{ :keys [pg-spec
@@ -72,6 +75,7 @@
             limit]}]
   (jdbc/query pg-spec
     [(str "select * from " table " where username = 'icohen' or username = 'moquist' limit " limit)]))
+
 
 (defn datomize-pg-table-col [table upsert-column-name {:keys[column_name data_type]}]
   "Convert a postgres table column to a datom"
@@ -84,11 +88,13 @@
     (when (= upsert-column-name column_name)
       {:db/unique :db.unique/identity})))
 
+
 (defn datom-to-timecreated [table datom]
   (->> datom
     ((keyword (str table "/timecreated")))
     (* 1000)
     (java.sql.Timestamp. )))
+
 
 (defn timecreated-to-tx-datom [ timecreated ]
   {:db/id (d/tempid :db.part/tx)
@@ -121,7 +127,6 @@
             e aname)
        seq
        (sort-by #(nth % 2))))
-
 
 
 (defn get-pg-schema-tx-data [{:keys [pg-spec
@@ -187,7 +192,8 @@
         param-spec (merge import-spec table-spec)]
     (import-schema param-spec)
     (import-rows param-spec)))
-    
+
+
 (defn query-table [{:keys [ table
                             datomic-conn]}]
   "Debugging queries to run after import-table"
@@ -224,6 +230,7 @@
          (str "history of " (:mdl_sis_user_hist/username a-user) "'s passwords")
          (entity-attribute-history db (:db/id a-user) :mdl_sis_user_hist/password)]))))
 
+
 (defn import-table-and-query
   "Debugging fn. Probably delete this later...
    Returns import-spec"
@@ -238,4 +245,3 @@
     (import-table import-spec)
     (query-table import-spec)
     import-spec))
-
