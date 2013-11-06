@@ -236,5 +236,6 @@
      :as fn-args}]
   (let [import-spec  (merge default-args fn-args)]
     (import-table import-spec)
-    (query-table import-spec)))
+    (query-table import-spec)
+    import-spec))
 
