@@ -161,8 +161,8 @@
                             upsert-column-name]
                       :as fn-args}]
   (let [import-spec (merge default-args fn-args)
-        schema-tx-data    (get-pg-schema-tx-data fn-args)
-        rows-tx-data      (get-pg-rows-tx-data fn-args)]
+        schema-tx-data    (get-pg-schema-tx-data import-spec)
+        rows-tx-data      (get-pg-rows-tx-data import-spec)]
     {:table             table
      :schema-tx-data    schema-tx-data
      :rows-tx-data      rows-tx-data}))
@@ -176,8 +176,7 @@
 (defn import-rows [{:keys [datomic-conn
                           rows-tx-data]}]
   (doseq [datoms rows-tx-data]
-    ((partial d/transact datomic-conn)
-      datoms)))
+    (d/transact datomic-conn datoms)))
 
 
 (defn import-table [{:keys [pg-spec
