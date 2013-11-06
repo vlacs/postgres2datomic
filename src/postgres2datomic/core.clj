@@ -226,7 +226,7 @@
 
 (defn import-table-and-query
   "Debugging fn. Probably delete this later...
-   Return db with schema loaded - Can be run from lein repl as shown below"
+   Returns import-spec"
   ;Postgres2datomic.core=>  (do (require (ns-name *ns*) :reload-all)(import-table-and-query "mdl_sis_user_hist" :upsert-column-name "sis_user_idstr"))
   [{:keys [table
            limit
