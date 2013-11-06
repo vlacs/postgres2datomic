@@ -187,7 +187,42 @@
         param-spec (merge import-spec table-spec)]
     (import-schema param-spec)
     (import-rows param-spec)))
-
+    
+(defn query-table [{:keys [ table
+                            datomic-conn]}]
+  "Debugging queries to run after import-table"
+  (let [db (d/db datomic-conn)
+        rules '[[[attr-in-namespace ?e ?ns2]
+                 [?e :db/ident ?a]
+                 [?e :db/valueType]
+                 [(namespace ?a) ?ns1]
+                 [(= ?ns1 ?ns2)]]]]
+     (dorun
+       (map pprint [
+        ; "list all attributes in the table namespace"
+        ; (d/q '[:find ?e
+        ;        :in $ ?t
+        ;        :where
+        ;        [?e :db/valueType]
+        ;        [?e :db/ident ?a]
+        ;        [(namespace ?a) ?ns]
+        ;        [(= ?ns ?t)]]
+        ;      db table)
+         (str "count all entities possessing *any* " table " attribute")
+         (d/q '[:find (count ?e)
+              :in $ % ?t
+                :where
+                (attr-in-namespace ?a ?t)
+                [?e ?a]]
+              db rules table)
+         "tx-instants"
+         (reverse (sort (d/q '[:find ?when :where [_ :db/txInstant ?when]] db)))
+         "timecreateds"
+         (reverse (sort (d/q '[:find ?when :where [_ :pg/timecreated ?when]] db)))
+         "a user"
+         (def a-user (qe '[:find ?e :where [?e :mdl_sis_user_hist/username "icohen"]] db))
+         (str "history of " (:mdl_sis_user_hist/username a-user) "'s passwords")
+         (entity-attribute-history db (:db/id a-user) :mdl_sis_user_hist/password)]))))
 
 (defn import-table-and-query
   "Debugging fn. Probably delete this later...
@@ -199,41 +234,7 @@
            schema-edn-output-file
            rows-edn-output-file]
      :as fn-args}]
-  (let [import-spec  (merge default-args fn-args)
-        datomic-conn (:datomic-conn import-spec)]
+  (let [import-spec  (merge default-args fn-args)]
     (import-table import-spec)
-    (def db (d/db datomic-conn))
-    (def conn datomic-conn)
-    (def rules
-      '[[[attr-in-namespace ?e ?ns2]
-         [?e :db/ident ?a]
-         [?e :db/valueType]
-         [(namespace ?a) ?ns1]
-         [(= ?ns1 ?ns2)]]])
-    (dorun
-      (map pprint [
-       ; "list all attributes in the table namespace"
-       ; (d/q '[:find ?e
-       ;        :in $ ?t
-       ;        :where
-       ;        [?e :db/valueType]
-       ;        [?e :db/ident ?a]
-       ;        [(namespace ?a) ?ns]
-       ;        [(= ?ns ?t)]]
-       ;      db table)
-        (str "count all entities possessing *any* " table " attribute")
-        (d/q '[:find (count ?e)
-             :in $ % ?t
-               :where
-               (attr-in-namespace ?a ?t)
-               [?e ?a]]
-             db rules table)
-        "tx-instants"
-        (reverse (sort (d/q '[:find ?when :where [_ :db/txInstant ?when]] db)))
-        "timecreateds"
-        (reverse (sort (d/q '[:find ?when :where [_ :pg/timecreated ?when]] db)))
-        "a user"
-        (def a-user (qe '[:find ?e :where [?e :mdl_sis_user_hist/username "icohen"]] db))
-        (str "history of " (:mdl_sis_user_hist/username a-user) "'s passwords")
-        (entity-attribute-history db (:db/id a-user) :mdl_sis_user_hist/password)]))))
+    (query-table import-spec)))
 
