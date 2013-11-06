@@ -215,7 +215,7 @@
         ;      db table)
          (str "count all entities possessing *any* " table " attribute")
          (d/q '[:find (count ?e)
-              :in $ % ?t
+                :in $ % ?t
                 :where
                 (attr-in-namespace ?a ?t)
                 [?e ?a]]
